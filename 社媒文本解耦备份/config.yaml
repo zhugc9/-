@@ -1,0 +1,95 @@
+# 📁 文件路径配置
+# 输入文件夹：存放待分析的社交媒体数据文件（Excel格式）
+INPUT_PATH: "C:\\Users\\87010\\Desktop\\社交媒体议题单元划分素材"
+# 输出文件夹：存放分析结果和信度检验文件
+OUTPUT_PATH: "C:\\Users\\87010\\Desktop\\社交媒体议题单元划分结果"
+
+# 🔬 信度检验配置
+# 是否启用信度检验模式（生成人工检验样本）
+RELIABILITY_TEST_MODE: true
+# 各信源的抽样配置：recall=召回率检验样本数（只做反向检验）
+RELIABILITY_SAMPLING_CONFIG:
+  vk:  # VK平台：50个召回率样本
+    recall: 50
+
+# 🤖 API配置
+API_CONFIG:
+  # API密钥列表（支持多个密钥轮换使用）
+  API_KEYS:
+    - "sk-oS1mPWSBCvf5czQQ1CyRXRGWOWQ4CFWis8qNV0UlEqbQYzoH"
+  # API服务基础URL
+  BASE_URL: "https://openai.sharkmagic.com.cn/v1"
+  # 不同处理阶段的模型配置
+  STAGE_MODELS:
+    VK_BATCH: "[官自-0.7]gemini-2-5-flash"           # VK批处理：使用较高质量模型
+    VK_BATCH_LONG: "[官自-3]gemini-2-5-pro"          # VK长文本批处理：使用高性能模型
+    ZHIHU_CHUNKING: "[官自-0.7]gemini-2-5-flash"     # 知乎分块：使用较高质量模型
+    ZHIHU_ANALYSIS: "[官自-0.7]gemini-2-5-flash"       # 知乎分析：使用较高质量模型
+    ZHIHU_ANALYSIS_SHORT: "[官自-0.3]gemini-2-5-flash-lite" # 知乎短文本分析：使用轻量快速模型
+    ZHIHU_ANALYSIS_LONG: "[官自-3]gemini-2-5-pro"     # 知乎长文本分析：使用高性能模型
+
+# 🧠 智能模型选择说明
+# VK评论处理流程：
+#   ├── 计算 post_text + comments_json 的总token数
+#   ├── ≤2000 tokens → 使用 VK_BATCH （较高质量模型）
+#   └── >2000 tokens → 使用 VK_BATCH_LONG （高性能模型）
+#
+# 知乎回答处理流程：
+# 短文本直接分析模式：
+#   ├── 计算answer_text的token数
+#   ├── <100 tokens → 使用 ZHIHU_ANALYSIS_SHORT （轻量快速模型）
+#   └── ≥100 tokens → 使用两步式分析模式
+#
+# 长文本两步式分析模式：
+#   ├── 第一步：议题单元划分（使用 ZHIHU_CHUNKING 轻量模型）
+#   └── 第二步：议题单元分析（根据单元长度选择）：
+#       ├── <100 tokens → 使用 ZHIHU_ANALYSIS_SHORT （轻量快速模型）
+#       ├── 100-1300 tokens → 使用 ZHIHU_ANALYSIS （较高质量模型）
+#       └── >1300 tokens → 使用 ZHIHU_ANALYSIS_LONG （高性能模型）
+
+# 📝 文本长度智能模型选择配置
+# VK批处理长文本阈值（token数），超过此长度使用高性能模型
+VK_LONG_TEXT_THRESHOLD: 1500
+
+# 知乎文本长度阈值配置（token数）
+ZHIHU_SHORT_TOKEN_THRESHOLD: 100   # 短文本阈值，低于此长度直接分析（类似VK），使用轻量模型
+ZHIHU_LONG_TOKEN_THRESHOLD: 1300   # 长文本阈值，使用高性能模型
+
+# ⚙️ 处理配置
+MAX_CONCURRENT_REQUESTS: 2    # 最大并发请求数（避免API限流）
+API_RETRY_ATTEMPTS: 3         # API失败重试次数
+RATE_LIMIT_BASE_DELAY: 2      # 基础延迟时间（秒），重试时会指数增长
+SKIP_FAILED_TEXTS: true       # 是否跳过API失败的文本（True=跳过，False=抛出异常）
+
+# 🌐 语言配置
+# 不同语言的处理参数：TIMEOUT=超时时间（秒）
+# 注意：只有VK（俄语）使用批处理，知乎（中文）是逐条处理
+LANGUAGE_CONFIGS:
+  zh:  # 中文配置
+    TIMEOUT: 600               # API超时时间（秒）
+    MAX_CONCURRENT: 2          # 最大并发数
+  ru:  # 俄语配置
+    BATCH_SIZE_LIMIT: 100      # 批处理大小限制
+    TIMEOUT: 180               # API超时时间（秒）
+    MAX_CONCURRENT: 2          # 最大并发数
+    SAVE_INTERVAL: 20          # 保存间隔
+  en:  # 英语配置
+    BATCH_SIZE_LIMIT: 30       # 批处理大小限制
+    TIMEOUT: 240               # API超时时间（秒）
+    MAX_CONCURRENT: 6          # 最大并发数
+    SAVE_INTERVAL: 10          # 保存间隔
+
+# 📊 列名映射配置
+# 定义不同数据源Excel文件中的列名映射关系
+COLUMN_MAPPING:
+  vk:  # VK平台数据列名映射
+    post_id: "post_id"           # 帖子ID列
+    post_text: "post_text"       # 帖子内容列
+    comment_id: "comment_id"     # 评论ID列
+    comment_text: "comment_text" # 评论内容列
+    channel_name: "channel_name" # 频道名称列
+  zhihu:  # 知乎平台数据列名映射
+    id: "序号"                    # 回答序号列
+    question: "知乎问题标题及描述"  # 问题内容列
+    answer_text: "回答内容"       # 回答内容列
+    author: "回答用户名"           # 回答作者列
