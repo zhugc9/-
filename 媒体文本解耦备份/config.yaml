@@ -152,7 +152,7 @@ randomization:
 api_config:
   # API密钥列表：支持多个密钥轮换
   API_KEYS:
-    - "sk-oS1mPWSBCvf5czQQ1CyRXRGWOWQ4CFWis8qNV0UlEqbQYzoH"
+    - "skoH"
   
   # API基础URL：代理服务地址
   BASE_URL: "https://openai.sharkmagic.com.cn/v1"
