@@ -1,0 +1,238 @@
+# ------------------------------------------------------------------------------
+# 🔑 API 配置 - 所有API相关设置的统一入口
+# ------------------------------------------------------------------------------
+api:
+  # API认证信息
+  credentials:
+    # API密钥列表：支持多个密钥轮换使用，提高稳定性
+    keys:
+      - "your-api-key-placeholder" # 实际密钥请通过环境变量OPENAI_API_KEY或API_KEY提供
+    # API服务基础URL
+    base_url: "https://openai.sharkmagic.com.cn/v1"
+
+  # API请求参数
+  request_params:
+    temperature: 0     # 温度参数：0=确定性输出，适合分析任务
+    response_format:
+      type: "json_object" # 响应格式：强制JSON格式输出，便于结构化解析
+
+  # 🔄 API策略配置
+  strategy:
+    max_concurrent_requests: 2    # 全局并发数
+    attempts_per_model: 3         # 每个模型重试次数
+    max_model_switches: 2         # 模型切换次数
+    retry_delays_sec: [2, 5, 10]  # 重试延迟（秒）
+    queue_timeout_sec: 30.0       # 队列超时（秒）
+    timeout_sec: 250              # API超时（秒，基于您的150秒经验+缓冲）
+
+# ------------------------------------------------------------------------------
+# 🔄 数据处理与流程控制
+# ------------------------------------------------------------------------------
+processing:
+  # 自动重试配置（用于断点续传）
+  auto_retry:
+    enabled: true                 # 是否启用自动重试功能
+    max_rounds: 5                 # 最大重试轮数（防止无限循环）
+    delay_minutes: 2              # 重试前等待时间（分钟）
+    min_failed_threshold: 1       # 触发重试的最小失败记录数
+
+  # 通用数据处理配置
+  general:
+    skip_on_api_failure: true     # API失败时跳过继续处理
+    buffer_limit: 20              # 结果保存缓冲区大小
+
+# ------------------------------------------------------------------------------
+# 📰 媒体文本分析专用配置
+# ------------------------------------------------------------------------------
+media_text:
+  # 文件路径配置
+  paths:
+    input: "C:\\Users\\87010\\Desktop\\媒体文本议题单元划分素材"   # 输入文件夹：包含待处理的Excel文件
+    output: "C:\\Users\\87010\\Desktop\\媒体文本议题单元划分结果"  # 输出文件夹：分析结果保存位置
+
+  # 🧠 模型池配置：两阶段处理的智能模型选择
+  # 处理流程：
+  #   1. 议题单元提取阶段 → 使用 UNIT_EXTRACTION 模型（高性能模型）
+  #   2. 单元深度分析阶段 → 使用 UNIT_ANALYSIS 模型（高性价比模型）
+  model_pools:
+    primary_models:
+      UNIT_EXTRACTION: "[官自-3]gemini-2-5-pro"      # 第一阶段：议题单元提取，长文本强模型
+      UNIT_ANALYSIS: "[官自-0.7]gemini-2-5-flash"    # 第二阶段：单元深度分析，高性价比快速模型
+    
+    fallback_models:
+      UNIT_EXTRACTION:
+        - "[羊毛-2]gemini-2.5-pro-0605-100k"
+      UNIT_ANALYSIS:
+        - ""
+
+  # Excel列名映射：将Excel文件中的列名映射为程序内部使用的标准名称
+  column_mapping:
+    ID: "序号"           # 文章ID列名：Excel中用于标识每篇文章的唯一编号
+    MEDIA_TITLE: "标题"  # 文章标题列名：Excel中存储文章标题的列名
+    MEDIA_TEXT: "text"   # 文章正文列名：Excel中存储文章正文内容的列名
+
+# ------------------------------------------------------------------------------
+# 📱 社交媒体分析专用配置
+# ------------------------------------------------------------------------------
+social_media:
+  # 文件路径配置
+  paths:
+    input: "C:\\Users\\87010\\Desktop\\社交媒体议题单元划分素材"   # 输入文件夹：社交媒体数据文件（Excel格式）
+    output: "C:\\Users\\87010\\Desktop\\社交媒体议题单元划分结果"  # 输出文件夹：分析结果和信度检验文件
+
+  # 文本长度阈值配置：智能模型选择的判断标准
+  text_length_thresholds:
+    vk_long_text: 1500      # VK批处理长文本阈值（token数），超过此长度使用高性能模型
+    zhihu_short_text: 100   # 知乎短文本阈值：低于此长度直接分析，使用轻量模型
+    zhihu_long_text: 1300   # 知乎长文本阈值：超过此长度使用高性能模型
+
+  # 🧠 模型池配置：针对不同平台和文本长度的智能模型选择
+  # 
+  # VK评论处理流程（批处理）：
+  #   ├── 计算 post_text + comments_json 的总token数
+  #   ├── ≤1500 tokens → 使用 VK_BATCH （较高质量模型）
+  #   └── >1500 tokens → 使用 VK_BATCH_LONG （高性能模型）
+  #
+  # 知乎回答处理流程（智能分流）：
+  # 短文本直接分析模式：
+  #   ├── 计算answer_text的token数
+  #   ├── <100 tokens → 使用 ZHIHU_ANALYSIS_SHORT （轻量快速模型）
+  #   └── ≥100 tokens → 进入两步式分析模式
+  #
+  # 长文本两步式分析模式：
+  #   ├── 第一步：议题单元划分 → 使用 ZHIHU_CHUNKING 模型
+  #   └── 第二步：议题单元分析（根据单元长度选择）：
+  #       ├── <100 tokens → 使用 ZHIHU_ANALYSIS_SHORT （轻量快速模型）
+  #       ├── 100-1300 tokens → 使用 ZHIHU_ANALYSIS （较高质量模型）
+  #       └── >1300 tokens → 使用 ZHIHU_ANALYSIS_LONG （高性能模型）
+  model_pools:
+    primary_models:
+      # VK平台模型配置
+      VK_BATCH: "[官自-0.7]gemini-2-5-flash"           # VK批处理：较高质量模型
+      VK_BATCH_LONG: "[官自-3]gemini-2-5-pro"          # VK长文本批处理：高性能模型
+      # 知乎平台模型配置
+      ZHIHU_CHUNKING: "[官自-0.7]gemini-2-5-flash"     # 知乎分块：较高质量模型
+      ZHIHU_ANALYSIS_SHORT: "[官自-0.3]gemini-2-5-flash-lite" # 知乎短文本分析：轻量快速模型
+      ZHIHU_ANALYSIS: "[官自-0.7]gemini-2-5-flash"     # 知乎分析：较高质量模型
+      ZHIHU_ANALYSIS_LONG: "[官自-3]gemini-2-5-pro"    # 知乎长文本分析：高性能模型
+   
+    fallback_models:
+      VK_BATCH:
+        - "[羊毛-2]gemini-2.5-pro-0605-100k"
+      VK_BATCH_LONG:
+        - "your-fallback-model-placeholder"  # 请设置VK长文本后备模型
+      ZHIHU_CHUNKING:
+        - "[羊毛-2]gemini-2.5-pro-0605-100k"
+      ZHIHU_ANALYSIS_SHORT:
+        - "your-fallback-model-placeholder"  # 请设置知乎短文本后备模型
+      ZHIHU_ANALYSIS:
+        - "[羊毛-2]gemini-2.5-pro-0605-100k"
+      ZHIHU_ANALYSIS_LONG:
+        - "your-fallback-model-placeholder"  # 请设置知乎长文本后备模型
+
+  # VK批处理配置
+  vk_processing:
+    batch_size_limit: 20              # 每个批次包含的评论数量
+    save_interval: 5                  # 每处理多少个批次保存一次进度
+
+  # 列名映射配置：定义不同数据源Excel文件中的列名映射关系
+  column_mapping:
+    vk:  # VK平台数据列名映射
+      post_id: "post_id"           # 帖子ID列
+      post_text: "post_text"       # 帖子内容列
+      comment_id: "comment_id"     # 评论ID列
+      comment_text: "comment_text" # 评论内容列
+      channel_name: "channel_name" # 频道名称列
+    zhihu:  # 知乎平台数据列名映射
+      id: "序号"                    # 回答序号列
+      question: "知乎问题标题及描述"  # 问题内容列
+      answer_text: "回答内容"       # 回答内容列
+      author: "回答用户名"           # 回答作者列
+
+# ------------------------------------------------------------------------------
+# 🔬 信度检验配置 - 三阶段验证方案
+# ------------------------------------------------------------------------------
+# 信度检验说明：
+#   precision：准确率检验，从成功处理的单元中抽样，用于验证单元划分质量
+#   recall：召回率检验，从被舍弃的完整文本中抽样，用于验证是否遗漏相关内容
+reliability_test:
+  enabled: true  # 是否启用信度检验模式（生成人工检验样本）
+  
+  # 各信源的抽样配置
+  sampling_config:
+    # 媒体文本信源配置
+    俄总统:
+      precision: 80    # 主样本库：成功议题单元抽样数（用于准确率+单元构建+多维编码检验）
+      recall: 40       # 召回率检验：被舍弃完整文章抽样数
+    俄语媒体:
+      precision: 80    
+      recall: 40       
+    中文媒体:
+      precision: 80
+      recall: 40
+    英语媒体:
+      precision: 80
+      recall: 40
+    未知来源:
+      precision: 20    
+      recall: 10
+    
+    # 社交媒体信源配置
+    vk:  # VK平台：只做召回率检验（检查是否遗漏相关评论）
+      precision: 0     # 不做准确率检验
+      recall: 50       # 召回率检验样本数
+    zhihu:  # 知乎平台：只做准确率检验（检查单元划分质量）
+      precision: 50    # 准确率检验样本数
+      recall: 0        # 不做召回率检验
+
+# ------------------------------------------------------------------------------
+# 📊 统一输出列定义
+# ------------------------------------------------------------------------------
+# 用于强制补齐，避免不同语言/批次导致列缺失
+# 该列表定义了所有输出Excel文件必须包含的列名
+required_output_columns:
+  # 输入基础列（保持在最前）
+  - "序号"      # 文章/回答唯一标识
+  - "日期"      # 发布日期
+  - "标题"      # 文章标题或问题标题
+  - "token数"   # 文本token数统计
+  - "text"      # 原文内容
+  
+  # 议题单元输出列
+  - "Unit_ID"                    # 议题单元唯一标识
+  - "Source"                     # 信源标识（俄总统/俄语媒体/中文媒体/英语媒体/vk/zhihu/未知来源）
+  - "speaker"                    # 发言人/信源标准化标识
+  - "Unit_Text"                  # 议题单元原文
+  - "seed_sentence"              # 种子句子（用于单元构建的锚点）
+  - "expansion_logic"            # 单元构建逻辑报告
+  - "Unit_Hash"                  # 单元文本哈希值（用于去重）
+  - "processing_status"          # 处理状态（SUCCESS/NO_RELEVANT/API_FAILED）
+  
+  # 核心事件提取
+  - "Incident"                   # 核心事件、观点或行动的一句话概括
+  
+  # 六维框架功能分析（对象格式）- 按优先级排序
+  - "Frame_SolutionRecommendation"   # 方案建议（优先级1，对象列表：quote, reason, reasoning_pattern）
+  - "Frame_ResponsibilityAttribution" # 归因指责（优先级2，对象列表：quote, reason, reasoning_pattern）
+  - "Frame_CausalExplanation"        # 因果解释（优先级3，对象列表：quote, reason, reasoning_pattern）
+  - "Frame_MoralEvaluation"          # 道德评价（优先级4，对象列表：quote, reason, reasoning_pattern）
+  - "Frame_ProblemDefinition"        # 问题建构（优先级5，对象列表：quote, reason, reasoning_pattern）
+  - "Frame_ActionStatement"          # 事实宣称（优先级6，对象列表：quote, reason, reasoning_pattern）
+  
+  # 核心分析维度
+  - "Valence"                           # 情感极性（正面/负面/中立/事实陈述）
+  - "Evidence_Type"                     # 证据类型（数据/统计/官方声明/专家观点等）
+  - "Attribution_Level"                 # 归因层级（个体/国家/社会/系统/不适用）
+  - "Temporal_Focus"                    # 时间焦点（追溯/现状/展望/混合）
+  - "Primary_Actor_Type"                # 主要行动者类型（国家/个人/次国家/国际组织等）
+  - "Geographic_Scope"                  # 地理范围（双边/区域/全球/国内/混合）
+  - "Relationship_Model_Definition"     # 关系模式定义（新型关系/传统伙伴/利益关系/未界定）
+  - "Discourse_Type"                    # 语段类型（经验性断言/规范性断言/展演性语段）
+
+  
+# ------------------------------------------------------------------------------
+# 🎲 项目全局配置
+# ------------------------------------------------------------------------------
+project:
+  # 随机种子：确保结果可重现（用于信度检验抽样等随机化操作）
+  random_seed: 2025
